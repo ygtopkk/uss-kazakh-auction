@@ -7,10 +7,10 @@ from .database import get_supabase
 
 app = FastAPI()
 
-# Enable CORS for frontend
+# Enable CORS for frontend and admin panel
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"], # In production, replace with specific origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -21,22 +21,32 @@ class BidRequest(BaseModel):
     auction_id: str
     max_bid_amount: float
 
-@app.get("/api/auction/active")
-async def get_active_auction():
+@app.get("/api/auctions/active")
+async def get_active_auctions():
     supabase = get_supabase()
     
-    # Get active auction with car details
+    # Get all active auctions with car details
     response = supabase.table("auctions") \
         .select("*, cars(*)") \
         .eq("status", "active") \
         .order("end_at", desc=False) \
-        .limit(1) \
+        .execute()
+    
+    return response.data
+
+@app.get("/api/auction/{auction_id}")
+async def get_auction_detail(auction_id: str):
+    supabase = get_supabase()
+    response = supabase.table("auctions") \
+        .select("*, cars(*)") \
+        .eq("id", auction_id) \
+        .single() \
         .execute()
     
     if not response.data:
-        raise HTTPException(status_code=404, detail="No active auction found")
+        raise HTTPException(status_code=404, detail="Auction not found")
     
-    return response.data[0]
+    return response.data
 
 @app.post("/api/bid")
 async def place_bid(bid: BidRequest):
@@ -123,6 +133,10 @@ class CarCreate(BaseModel):
     model: str
     year_produced: int
     inspection_report: Optional[str] = None
+    vin: Optional[str] = None
+    mileage: Optional[int] = None
+    images: Optional[list[str]] = None
+    uss_report_img: Optional[str] = None
 
 class AuctionCreate(BaseModel):
     car_id: str
@@ -131,6 +145,14 @@ class AuctionCreate(BaseModel):
     bid_step: float
     start_at: datetime
     end_at: datetime
+
+@app.get("/")
+async def root():
+    return {
+        "status": "online",
+        "message": "USS Kazakh API is running",
+        "docs": "/docs"
+    }
 
 @app.get("/api/admin/auctions")
 async def admin_get_auctions():
@@ -141,17 +163,38 @@ async def admin_get_auctions():
 @app.post("/api/admin/cars")
 async def admin_create_car(car: CarCreate):
     supabase = get_supabase()
-    response = supabase.table("cars").insert(car.dict()).execute()
-    return response.data[0]
+    try:
+        response = supabase.table("cars").insert(car.dict()).execute()
+        if not response.data:
+            raise HTTPException(status_code=500, detail=f"Failed to create car in database: {response}")
+        return response.data[0]
+    except Exception as e:
+        print(f"Error creating car: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @app.post("/api/admin/auctions")
 async def admin_create_auction(auction: AuctionCreate):
     supabase = get_supabase()
-    data = auction.dict()
-    data["status"] = "active"
-    data["current_price"] = auction.start_price
-    response = supabase.table("auctions").insert(data).execute()
-    return response.data[0]
+    try:
+        # Convert datetime objects to ISO format strings for Supabase
+        data = {
+            "car_id": auction.car_id,
+            "start_price": auction.start_price,
+            "reserve_price": auction.reserve_price,
+            "bid_step": auction.bid_step,
+            "start_at": auction.start_at.isoformat(),
+            "end_at": auction.end_at.isoformat(),
+            "status": "active",
+            "current_price": auction.start_price
+        }
+        
+        response = supabase.table("auctions").insert(data).execute()
+        if not response.data:
+            raise HTTPException(status_code=500, detail=f"Failed to create auction in database: {response}")
+        return response.data[0]
+    except Exception as e:
+        print(f"Error creating auction: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @app.delete("/api/admin/auctions/{auction_id}")
 async def admin_delete_auction(auction_id: str):
