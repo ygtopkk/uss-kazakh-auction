@@ -118,6 +118,59 @@ async def place_bid(bid: BidRequest):
 
     return {"status": "success", "current_price": new_current_price, "end_at": new_end_at}
 
+class CarCreate(BaseModel):
+    make: str
+    model: str
+    year_produced: int
+    inspection_report: Optional[str] = None
+
+class AuctionCreate(BaseModel):
+    car_id: str
+    start_price: float
+    reserve_price: float
+    bid_step: float
+    start_at: datetime
+    end_at: datetime
+
+@app.get("/api/admin/auctions")
+async def admin_get_auctions():
+    supabase = get_supabase()
+    response = supabase.table("auctions").select("*, cars(*)").order("created_at", desc=True).execute()
+    return response.data
+
+@app.post("/api/admin/cars")
+async def admin_create_car(car: CarCreate):
+    supabase = get_supabase()
+    response = supabase.table("cars").insert(car.dict()).execute()
+    return response.data[0]
+
+@app.post("/api/admin/auctions")
+async def admin_create_auction(auction: AuctionCreate):
+    supabase = get_supabase()
+    data = auction.dict()
+    data["status"] = "active"
+    data["current_price"] = auction.start_price
+    response = supabase.table("auctions").insert(data).execute()
+    return response.data[0]
+
+@app.delete("/api/admin/auctions/{auction_id}")
+async def admin_delete_auction(auction_id: str):
+    supabase = get_supabase()
+    supabase.table("auctions").delete().eq("id", auction_id).execute()
+    return {"status": "deleted"}
+
+@app.get("/api/admin/stats")
+async def admin_get_stats():
+    supabase = get_supabase()
+    auctions = supabase.table("auctions").select("id", count="exact").execute()
+    bids = supabase.table("bids").select("id", count="exact").execute()
+    users = supabase.table("users").select("id", count="exact").execute()
+    return {
+        "total_auctions": auctions.count,
+        "total_bids": bids.count,
+        "total_users": users.count
+    }
+
 if __name__ == "__main__":
     import uvicorn
     import os
