@@ -5,8 +5,8 @@ nixPkgs = ["python311", "nodejs_20"]
 cmds = [
     "python3 -m pip install --upgrade pip",
     "pip install -r requirements.txt",
-    "cd frontend && npm install",
-    "cd admin_panel && npm install"
+    "cd frontend && npm install --no-frozen-lockfile",
+    "cd admin_panel && npm install --no-frozen-lockfile"
 ]
 
 [phases.build]
@@ -15,6 +15,10 @@ cmds = [
     "cd admin_panel && npm run build"
 ]
 
+[start]
+cmd = "echo 'Build finished successfully! Use Procfile commands to start services.'"
+
 [variables]
 PYTHONPATH = "."
 NODE_ENV = "production"
+NIXPACKS_METADATA = "python,node"
