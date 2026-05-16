@@ -16,39 +16,48 @@ dp = Dispatcher()
 
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
-    tg_id = message.from_user.id
-    username = message.from_user.username or message.from_user.first_name
-    
-    # Register user in Supabase
-    supabase = get_supabase()
-    
-    # Check if user exists
-    user_res = supabase.table("users").select("*").eq("tg_id", tg_id).execute()
-    
-    if not user_res.data:
-        # Create user
-        supabase.table("users").insert({
-            "tg_id": tg_id,
-            "username": username,
-            "role": "user"
-        }).execute()
-    
-    # Welcome message with WebApp button
-    welcome_text = (
-        f"Привет, {username}! 👋\n\n"
-        "Добро пожаловать на аукцион USS Kazakh. "
-        "Здесь вы можете участвовать в торгах на эксклюзивные автомобили.\n\n"
-        "Нажмите кнопку ниже, чтобы открыть текущий аукцион."
-    )
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text="Открыть аукцион 🚗", 
-            web_app=WebAppInfo(url=FRONTEND_URL)
-        )]
-    ])
-    
-    await message.answer(welcome_text, reply_markup=keyboard)
+    try:
+        tg_id = message.from_user.id
+        username = message.from_user.username or message.from_user.first_name
+        print(f"Client Bot: Start command from {username} ({tg_id})")
+        
+        try:
+            # Register user in Supabase
+            supabase = get_supabase()
+            
+            # Check if user exists
+            user_res = supabase.table("users").select("*").eq("tg_id", tg_id).execute()
+            
+            if not user_res.data:
+                # Create user
+                supabase.table("users").insert({
+                    "tg_id": tg_id,
+                    "username": username,
+                    "role": "user"
+                }).execute()
+                print(f"Client Bot: Registered new user {username}")
+        except Exception as db_e:
+            print(f"Client Bot DB Error (ignoring for UX): {db_e}")
+
+        # Welcome message with WebApp button
+        welcome_text = (
+            f"Привет, {username}! 👋\n\n"
+            "Добро пожаловать на аукцион USS Kazakh. "
+            "Здесь вы можете участвовать в торгах на эксклюзивные автомобили.\n\n"
+            "Нажмите кнопку ниже, чтобы открыть текущий аукцион."
+        )
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text="Открыть аукцион 🚗", 
+                web_app=WebAppInfo(url=FRONTEND_URL)
+            )]
+        ])
+        
+        await message.answer(welcome_text, reply_markup=keyboard)
+    except Exception as e:
+        print(f"Client Bot CRITICAL Error: {e}")
+        await message.answer("Добро пожаловать! Нажмите /start еще раз, если кнопка не появилась.")
 
 async def main():
     print("Bot is starting...")
